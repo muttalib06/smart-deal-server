@@ -34,6 +34,7 @@ async function run() {
     //create database and collection
     const database = client.db("smartDB");
     const productCollection = database.collection("products");
+    const userCollection = database.collection("users");
 
     //get data from mongodb
 
@@ -59,6 +60,20 @@ async function run() {
       const newProduct = req.body;
       const result = await productCollection.insertOne(newProduct);
       res.send(result);
+    });
+
+    // save users to mongodb;
+    app.post("/users", async (req, res) => {
+      const newUser = req.body;
+      const email = req.body.email;
+      const query = { email: email };
+      const existingUser = await userCollection.findOne(query);
+      if (existingUser) {
+        res.send({ message: "This is user already exist" });
+      } else {
+        const result = await userCollection.insertOne(newUser);
+        res.send(result);
+      }
     });
 
     //update data
