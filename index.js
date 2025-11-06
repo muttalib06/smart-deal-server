@@ -35,6 +35,7 @@ async function run() {
     const database = client.db("smartDB");
     const productCollection = database.collection("products");
     const userCollection = database.collection("users");
+    const bidsCollection = database.collection("bids");
 
     //get data from mongodb
 
@@ -45,9 +46,16 @@ async function run() {
       res.send(result);
     });
 
+    // get recent data from mongodb;
+    app.get("/recent-products", async (req, res) => {
+      const cursor = productCollection.find().sort({ crated_at: -1 }).limit(6);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     //get data by specific ID;
 
-    app.get("/products/:id", async (req, res) => {
+    app.get("/product-detail/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
       const result = await productCollection.findOne(query);
@@ -76,6 +84,32 @@ async function run() {
       }
     });
 
+    // bid collection
+    app.post("/bids", async (req, res) => {
+      const newBid = req.body;
+      const result = await bidsCollection.insertOne(newBid);
+      res.send(result);
+    });
+
+    app.get("/products/bids/:productId", async (req, res) => {
+      const productId = req.params.productId;
+      const query = { product: productId };
+      const cursor = bidsCollection.find(query).sort({ bid_price: -1 });
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
+    app.get("/bids", async (req, res) => {
+      const email = req.query.email;
+      const query = {};
+      if (email) {
+        query.buyer_email = email;
+      }
+      const cursor = bidsCollection.find(query);
+      const result = await cursor.toArray();
+      res.send(result);
+    });
+
     //update data
 
     app.patch("/products/:id", async (req, res) => {
@@ -91,6 +125,13 @@ async function run() {
     });
 
     //delete data from mongodb
+
+    app.delete("/bids/:id",async(req,res) => {
+      const id = req.params.id;
+      const query = {_id:new ObjectId(id)};
+      const result = await bidsCollection.deleteOne(query);
+      res.send(result);
+    })
 
     app.delete("/products/:id", async (req, res) => {
       const id = req.params.id;
