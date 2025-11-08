@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config()
+require("dotenv").config();
+const jwt = require("jsonwebtoken");
+const admin = require("firebase-admin");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 const port = process.env.PORT || 3000;
@@ -9,8 +11,33 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-const uri =
-  `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster3.rsapi6v.mongodb.net/?appName=Cluster3`;
+const serviceAccount = require("./smart-deal-auth-firebase-admin.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+// validate token;
+
+const verifyJwtToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized access" });
+  }
+  jwt.verify(token, process.env.JWT_SECRET, (err, decode) => {
+    if (err) {
+     return res.status(403).send({ message: "Forbidden" });
+    }
+    req.decode = decode;
+    next();
+  });
+};
+
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster3.rsapi6v.mongodb.net/?appName=Cluster3`;
 
 // mongodb client
 
@@ -63,6 +90,16 @@ async function run() {
       res.send(result);
     });
 
+    // token related API;
+
+    app.post("/getToken", (req, res) => {
+      const loggedUser = req.body;
+      const token = jwt.sign(loggedUser, process.env.JWT_SECRET, {
+        expiresIn: "1h",
+      });
+      res.send({ token: token });
+    });
+
     //save data to mongodb
 
     app.post("/products", async (req, res) => {
@@ -100,11 +137,15 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/bids", async (req, res) => {
+    app.get("/bids", verifyJwtToken, async (req, res) => {
       const email = req.query.email;
+      // const decodeEmail = req.decode.email;
       const query = {};
       if (email) {
-        query.buyer_email = email;
+        // if (email !== decodeEmail) {
+        //   return res.status(401).send({ message: "Unauthorized access" });
+        // }
+        query.buyer_email= email;
       }
       const cursor = bidsCollection.find(query);
       const result = await cursor.toArray();
@@ -127,12 +168,12 @@ async function run() {
 
     //delete data from mongodb
 
-    app.delete("/bids/:id",async(req,res) => {
+    app.delete("/bids/:id", async (req, res) => {
       const id = req.params.id;
-      const query = {_id:new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const result = await bidsCollection.deleteOne(query);
       res.send(result);
-    })
+    });
 
     app.delete("/products/:id", async (req, res) => {
       const id = req.params.id;
