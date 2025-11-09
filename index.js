@@ -19,22 +19,20 @@ admin.initializeApp({
 
 // validate token;
 
-const verifyJwtToken = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
+const verifyFirebaseToken = async (req, res, next) => {
+  const authorization = req.headers.authorization;
+  if (!authorization) {
     return res.status(401).send({ message: "Unauthorized access" });
   }
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    return res.status(401).send({ message: "Unauthorized access" });
-  }
-  jwt.verify(token, process.env.JWT_SECRET, (err, decode) => {
-    if (err) {
-     return res.status(403).send({ message: "Forbidden" });
-    }
-    req.decode = decode;
+  const token = authorization.split(" ")[1];
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.token_email = decoded.email;
+    console.log(decoded);
     next();
-  });
+  } catch {
+    return res.status(403).send({ message: "Forbidden access" });
+  }
 };
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster3.rsapi6v.mongodb.net/?appName=Cluster3`;
@@ -102,7 +100,8 @@ async function run() {
 
     //save data to mongodb
 
-    app.post("/products", async (req, res) => {
+    app.post("/products", verifyFirebaseToken, async (req, res) => {
+      // console.log("header in the post ", req.headers);
       const newProduct = req.body;
       const result = await productCollection.insertOne(newProduct);
       res.send(result);
@@ -115,7 +114,7 @@ async function run() {
       const query = { email: email };
       const existingUser = await userCollection.findOne(query);
       if (existingUser) {
-        res.send({ message: "This is user already exist" });
+        return res.send({ message: "This is user already exist" });
       } else {
         const result = await userCollection.insertOne(newUser);
         res.send(result);
@@ -137,15 +136,15 @@ async function run() {
       res.send(result);
     });
 
-    app.get("/bids", verifyJwtToken, async (req, res) => {
+    app.get("/bids", verifyFirebaseToken, async (req, res) => {
       const email = req.query.email;
-      // const decodeEmail = req.decode.email;
+
       const query = {};
       if (email) {
-        // if (email !== decodeEmail) {
-        //   return res.status(401).send({ message: "Unauthorized access" });
-        // }
-        query.buyer_email= email;
+        query.buyer_email = email;
+        if (email !== req.token_email) {
+          return res.status(403).send({ message: "Unauthorized access" });
+        }
       }
       const cursor = bidsCollection.find(query);
       const result = await cursor.toArray();
